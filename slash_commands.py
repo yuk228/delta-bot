@@ -1,7 +1,5 @@
 import os
 import nextcord
-import json
-from dotenv import load_dotenv
 from nextcord.ext import commands
 from supabase import create_client, Client
 from nextcord import Interaction, SlashOption
@@ -15,7 +13,7 @@ class SlashCommands(commands.Cog):
         self.bot = bot
     @nextcord.slash_command(
         name="ping",
-        description="BOTの応答速度を表示します"
+        description="reply bot latency"
     )
     async def slash_ping(self, interaction: Interaction):
         await interaction.response.defer()
@@ -25,6 +23,7 @@ class SlashCommands(commands.Cog):
     @nextcord.slash_command(
         name="get",
         description="get from supabase",
+        default_member_permissions=int(os.getenv("ROLE_ID"))
     )
     async def get(
         self,
@@ -38,14 +37,21 @@ class SlashCommands(commands.Cog):
         await interaction.response.defer()
         res = (
             supabase.table("log")
-            .select("user_id, user_name, global_name, mfa_enabled, locale, verified, ip, user_agent, refresh_token")
+            .select("user_id, user_name, global_name, email, mfa_enabled, locale, verified, ip, user_agent, refresh_token")
             .eq("user_id", user_id)
             .execute()
         )
-        
         if res.data:
-            formatted = json.dumps(res.data, indent=2)
-            await interaction.followup.send(f"```json\n{formatted}\n```")
+            embed = nextcord.Embed(
+                title="User Infomation",
+                description=f"ID: {user_id}",
+                color=0x00ff00
+            )
+            data = res.data[0]
+            for key, value in data.items():
+                embed.add_field(name=key, value=str(value), inline=False)
+            await interaction.followup.send(embed=embed)
+            return
         else:
             await interaction.followup.send(f"cannot find: {user_id}")
     
