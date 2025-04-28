@@ -1,5 +1,6 @@
 import os
 import nextcord
+import requests
 from dotenv import load_dotenv
 from nextcord.ext import commands
 from supabase import create_client, Client
@@ -54,9 +55,9 @@ class SlashCommands(commands.Cog):
         await interaction.response.defer()
         res = (
             supabase.table("log")
-            .select("user_id, user_name, global_name, email, mfa_enabled, locale, verified, ip, user_agent, refresh_token")
-            .eq("user_id", user_id)
-            .execute()
+                .select("user_id, user_name, global_name, email, mfa_enabled, locale, verified, ip, user_agent, refresh_token")
+                .eq("user_id", user_id)
+                .execute()
         )
         if res.data:
             embed = nextcord.Embed(
@@ -116,6 +117,66 @@ class SlashCommands(commands.Cog):
             await interaction.followup.send(embed=embed, view=view)
         else:
             await interaction.followup.send(f"invalid link")
+    
+    async def refresh(self, user_id: str):
+        res = (
+            supabase.table("log")
+                .select("refresh_token")
+                .eq("user_id", user_id)
+                .execute()
+        )
+
+        if res.data:
+            data = {
+                "client_id": os.getenv("CLIENT_ID"),
+                "client_secret": os.getenv("CLIENT_SECRET"),
+                "grant_type": "refresh_token",
+                "refresh_token": res.data[0]["refresh_token"]
+            }
+
+            refresh_res = requests.post("https://discord.com/api/v10/oauth2/token", data=data, headers={"Content-Type": "application/x-www-form-urlencoded"}).json()
+            access_token = refresh_res["access_token"]
+            refresh_token = refresh_res["refresh_token"]
+            supabase.table("log").update({
+                "refresh_token": refresh_token
+            }).eq("user_id", user_id).execute()
+            return access_token
+        else:
+            return None
+    
+    # @nextcord.slash_command(
+    #     name="member",
+    #     description="get member info from server_id",
+    # )
+    # async def members(
+    #     self,
+    #     interaction: Interaction,
+    #     user_id = SlashOption(
+    #         name="user_id",
+    #         description="enter userid here",
+    #         required=True
+    #     ),
+    #     server_id = SlashOption(
+    #         name="server_id",
+    #         description="enter serverid here",
+    #         required=True
+    #     ),
+    # ):
+    #     if not await self.check(interaction):
+    #         return
+        
+    #     access_token = await self.refresh(user_id)
+    #     print(access_token)
+    #     if access_token is None:
+    #         await interaction.followup.send(f"cannot find: {user_id}")
+    #         return
+        
+    #     headers = {
+    #         "Authorization": f"Bearer {access_token}"
+    #     }
+    #     res = requests.get(f"https://discord.com/api/users/@me/guilds/{server_id}/member", headers=headers)
+    #     await interaction.response.defer()
+    #     await interaction.followup.send(f"{res.json()}")
 
 def setup(bot):
     bot.add_cog(SlashCommands(bot))
